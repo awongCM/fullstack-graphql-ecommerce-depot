@@ -161,14 +161,42 @@ Then use:
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ecommerce_depot"
 ```
 
-## Deploying to Render
+## Deploying to Render (cloud)
+
+This repo includes a [`render.yaml`](render.yaml) Blueprint that provisions a **free web service** and **free Postgres database** automatically.
+
+### One-click Blueprint deploy
+
+1. **Merge the PR** (or push `render.yaml` to your default branch on GitHub).
+2. Open the Blueprint link:
+
+   [https://dashboard.render.com/blueprint/new?repo=https://github.com/awongCM/fullstack-graphql-ecommerce-depot](https://dashboard.render.com/blueprint/new?repo=https://github.com/awongCM/fullstack-graphql-ecommerce-depot)
+
+3. Connect your GitHub account if prompted.
+4. Review the two resources Render will create:
+   - `depot` — Next.js web service
+   - `depot-db` — PostgreSQL database
+5. Click **Apply** to deploy.
+
+The Blueprint wires `DATABASE_URL` automatically and runs `npm run db:setup` (schema push + seed) before each deploy. The seed is idempotent — it only inserts products when the database is empty.
+
+Your live URL will be something like `https://depot.onrender.com`.
+
+### Free tier notes
+
+- Web services **spin down after 15 minutes** of inactivity — the first visit after idle may take ~30 seconds to wake up.
+- Free Postgres databases **expire after 90 days** (Render may show 30 days in some docs; check your dashboard). Fine for a learning POC; upgrade or export data if you want to keep it longer.
+
+### Manual deploy (without Blueprint)
+
+If you prefer the Dashboard:
 
 1. Create a [Render Postgres](https://render.com/docs/postgresql) database.
 2. Create a **Web Service** connected to this repo.
-3. Set build command: `npm install && npm run build`
-4. Set start command: `npm run start`
-5. Add env var `DATABASE_URL` from the database connection string.
-6. Run `npm run db:setup` once via Render Shell after first deploy.
+3. Build command: `npm ci && npm run build`
+4. Pre-deploy command: `npm run db:setup`
+5. Start command: `npm start`
+6. Add env var `DATABASE_URL` from the database **Internal Connection String**.
 
 ## Next learning steps
 

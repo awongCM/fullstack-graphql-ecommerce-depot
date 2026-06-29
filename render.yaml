@@ -1,0 +1,26 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Deploy: https://dashboard.render.com/blueprint/new?repo=https://github.com/awongCM/fullstack-graphql-ecommerce-depot
+
+databases:
+  - name: depot-db
+    databaseName: ecommerce_depot
+    plan: free
+    region: oregon
+
+services:
+  - type: web
+    name: depot
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm ci && npm run build
+    preDeployCommand: npm run db:setup
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: depot-db
+          property: connectionString
+      - key: NODE_VERSION
+        value: "20"

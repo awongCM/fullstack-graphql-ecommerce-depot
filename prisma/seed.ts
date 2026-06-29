@@ -60,10 +60,11 @@ const products = [
 ];
 
 async function main() {
-  await prisma.cartItem.deleteMany();
-  await prisma.order.deleteMany();
-  await prisma.cart.deleteMany();
-  await prisma.product.deleteMany();
+  const existing = await prisma.product.count();
+  if (existing > 0) {
+    console.log(`Skipping seed — ${existing} products already in database`);
+    return;
+  }
 
   for (const product of products) {
     await prisma.product.create({ data: product });
