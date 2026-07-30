@@ -24,3 +24,5 @@ services:
           property: connectionString
       - key: NODE_VERSION
         value: "20"
+      - key: PAYMENT_PROVIDER
+        value: stripe_mock
