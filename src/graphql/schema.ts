@@ -22,11 +22,22 @@ export const typeDefs = `#graphql
     itemCount: Int!
   }
 
+  type PaymentIntent {
+    paymentId: ID!
+    clientSecret: String!
+    amount: Float!
+    currency: String!
+    status: String!
+    orderId: ID!
+  }
+
   type CheckoutResult {
     success: Boolean!
     orderId: ID!
     message: String!
     total: Float!
+    paymentStatus: String!
+    failureCode: String
   }
 
   type Query {
@@ -39,6 +50,11 @@ export const typeDefs = `#graphql
     addToCart(cartId: ID!, productId: ID!, quantity: Int): Cart!
     updateCartItem(cartItemId: ID!, quantity: Int!): Cart!
     removeFromCart(cartItemId: ID!): Cart!
-    checkout(cartId: ID!): CheckoutResult!
+    createPaymentIntent(cartId: ID!): PaymentIntent!
+    confirmPayment(
+      paymentId: ID!
+      paymentMethodId: String
+      cardNumber: String
+    ): CheckoutResult!
   }
 `;

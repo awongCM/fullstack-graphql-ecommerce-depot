@@ -1,5 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import {
+  confirmPayment,
+  createPaymentIntent,
+} from "@/lib/payments/payment-service";
 
 type ProductRecord = {
   id: string;
@@ -37,9 +41,7 @@ function formatCartItem(item: CartItemRecord) {
   };
 }
 
-function formatCart(
-  cart: { id: string; items: CartItemRecord[] }
-) {
+function formatCart(cart: { id: string; items: CartItemRecord[] }) {
   const items = cart.items.map(formatCartItem);
   const total = items.reduce((sum, item) => sum + item.lineTotal, 0);
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -192,47 +194,26 @@ export const resolvers = {
       return formatCart(cart);
     },
 
-    checkout: async (_: unknown, { cartId }: { cartId: string }) => {
-      const cart = await getCartWithItems(cartId);
-      const formatted = formatCart(cart);
+    createPaymentIntent: async (
+      _: unknown,
+      { cartId }: { cartId: string }
+    ) => {
+      return createPaymentIntent(cartId);
+    },
 
-      if (formatted.items.length === 0) {
-        throw new Error("Cart is empty");
+    confirmPayment: async (
+      _: unknown,
+      {
+        paymentId,
+        paymentMethodId,
+        cardNumber,
+      }: {
+        paymentId: string;
+        paymentMethodId?: string | null;
+        cardNumber?: string | null;
       }
-
-      for (const item of formatted.items) {
-        if (item.product.stock < item.quantity) {
-          throw new Error(`${item.product.name} is out of stock`);
-        }
-      }
-
-      const order = await prisma.$transaction(async (tx) => {
-        for (const item of formatted.items) {
-          await tx.product.update({
-            where: { id: item.product.id },
-            data: { stock: { decrement: item.quantity } },
-          });
-        }
-
-        const created = await tx.order.create({
-          data: {
-            cartId,
-            total: formatted.total,
-            status: "confirmed",
-          },
-        });
-
-        await tx.cartItem.deleteMany({ where: { cartId } });
-
-        return created;
-      });
-
-      return {
-        success: true,
-        orderId: order.id,
-        message: "Order placed successfully (POC — no real payment processed)",
-        total: formatted.total,
-      };
+    ) => {
+      return confirmPayment({ paymentId, paymentMethodId, cardNumber });
     },
   },
 };

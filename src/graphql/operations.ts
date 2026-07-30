@@ -82,13 +82,36 @@ export const REMOVE_FROM_CART = gql`
   ${CART_FIELDS}
 `;
 
-export const CHECKOUT = gql`
-  mutation Checkout($cartId: ID!) {
-    checkout(cartId: $cartId) {
+export const CREATE_PAYMENT_INTENT = gql`
+  mutation CreatePaymentIntent($cartId: ID!) {
+    createPaymentIntent(cartId: $cartId) {
+      paymentId
+      clientSecret
+      amount
+      currency
+      status
+      orderId
+    }
+  }
+`;
+
+export const CONFIRM_PAYMENT = gql`
+  mutation ConfirmPayment(
+    $paymentId: ID!
+    $paymentMethodId: String
+    $cardNumber: String
+  ) {
+    confirmPayment(
+      paymentId: $paymentId
+      paymentMethodId: $paymentMethodId
+      cardNumber: $cardNumber
+    ) {
       success
       orderId
       message
       total
+      paymentStatus
+      failureCode
     }
   }
 `;

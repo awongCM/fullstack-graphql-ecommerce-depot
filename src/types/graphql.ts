@@ -21,9 +21,20 @@ export type Cart = {
   items: CartItem[];
 };
 
+export type PaymentIntent = {
+  paymentId: string;
+  clientSecret: string;
+  amount: number;
+  currency: string;
+  status: string;
+  orderId: string;
+};
+
 export type CheckoutResult = {
   success: boolean;
   orderId: string;
   message: string;
   total: number;
+  paymentStatus: string;
+  failureCode?: string | null;
 };

@@ -1,6 +1,6 @@
 # Depot — Full-Stack GraphQL E-commerce POC
 
-A proof-of-concept storefront for learning full-stack GraphQL. Browse products, manage a cart, and place fake orders — no real payments.
+A proof-of-concept storefront for learning full-stack GraphQL. Browse products, manage a cart, and complete a **Stripe-shaped mock checkout** (no real charges).
 
 ## Stack
 
@@ -10,6 +10,7 @@ A proof-of-concept storefront for learning full-stack GraphQL. Browse products, 
 | API | Apollo Server 4 (GraphQL at `/api/graphql`) |
 | Data fetching | Apollo Client 3 |
 | Database | PostgreSQL via Prisma ORM |
+| Payments | In-app Stripe mock (`PAYMENT_PROVIDER=stripe_mock`) |
 
 ## What you'll learn
 
@@ -17,8 +18,9 @@ A proof-of-concept storefront for learning full-stack GraphQL. Browse products, 
 - Resolver patterns and server-side validation
 - Apollo Server inside Next.js route handlers
 - Apollo Client queries/mutations with cache updates
-- Relational data modeling (products, carts, orders)
+- Relational data modeling (products, carts, orders, payments)
 - Session-less cart identity via browser `localStorage`
+- Stripe-style PaymentIntent → confirm → fulfill flow
 
 ## POC scope
 
@@ -26,12 +28,13 @@ A proof-of-concept storefront for learning full-stack GraphQL. Browse products, 
 
 - Product catalog (list + detail)
 - Add to cart / update quantity / remove items
-- Fake checkout (creates an order, decrements stock, clears cart)
+- Mock Stripe checkout (`createPaymentIntent` + `confirmPayment`)
+- Order line-item snapshots and payment records
 
 **Out of scope (for now)**
 
 - User authentication
-- Real payment processing
+- Real Stripe API / Stripe.js / webhooks
 - Admin panel / CMS
 - Headless CMS integration
 
@@ -60,6 +63,7 @@ Edit `.env`:
 
 ```env
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ecommerce_depot"
+PAYMENT_PROVIDER="stripe_mock"
 ```
 
 ### 3. Create tables and seed sample products
@@ -107,7 +111,51 @@ mutation {
 }
 ```
 
+Checkout (two-step mock Stripe flow):
+
+```graphql
+mutation {
+  createPaymentIntent(cartId: "your-cart-uuid") {
+    paymentId
+    clientSecret
+    amount
+    status
+    orderId
+  }
+}
+
+mutation {
+  confirmPayment(paymentId: "payment-id", paymentMethodId: "pm_card_visa") {
+    success
+    orderId
+    message
+    paymentStatus
+  }
+}
+```
+
 > Use a UUID for `cartId` — the web app generates one automatically in `localStorage` under `depot_cart_id`.
+
+## Mock payments (Stripe-shaped)
+
+Checkout no longer places an order in one mutation. It follows a PaymentIntent pattern:
+
+1. `createPaymentIntent(cartId)` — server calculates amount, creates a `pending_payment` order + line-item snapshot, returns `clientSecret`
+2. `confirmPayment(...)` — confirms with a mock payment method; on success: mark paid, decrement stock, clear cart
+
+### Test outcomes
+
+| Method | Card number | Result |
+|--------|-------------|--------|
+| `pm_card_visa` | `4242 4242 4242 4242` | Succeeded |
+| `pm_card_declined` | `4000 0000 0000 0002` | `card_declined` |
+| `pm_card_insufficient` | `4000 0000 0000 9995` | `insufficient_funds` |
+
+The checkout UI supports **both** a simulate dropdown and a fake card form.
+
+Stock is **not** decremented until payment succeeds. Failed payments leave the order as `failed`; start a new intent to retry.
+
+`PAYMENT_PROVIDER=stripe_mock` is the default. A real Stripe provider can be swapped behind the same `PaymentProvider` interface later.
 
 ## Project structure
 
@@ -116,7 +164,7 @@ src/
 ├── app/                    # Next.js pages and API routes
 │   ├── api/graphql/        # Apollo Server endpoint
 │   ├── cart/
-│   ├── checkout/
+│   ├── checkout/           # Two-step mock Stripe checkout
 │   └── products/[id]/
 ├── components/             # UI components
 ├── graphql/
@@ -126,9 +174,10 @@ src/
 └── lib/
     ├── prisma.ts           # Prisma client singleton
     ├── apollo-provider.tsx # Apollo Client provider
-    └── cart-session.ts     # Browser cart ID helpers
+    ├── cart-session.ts     # Browser cart ID helpers
+    └── payments/           # PaymentProvider + Stripe mock
 prisma/
-├── schema.prisma           # Database models
+├── schema.prisma           # Products, carts, orders, payments
 └── seed.ts                 # Sample product data
 ```
 
@@ -204,7 +253,7 @@ If you prefer the Dashboard:
 2. Swap `localStorage` cart IDs for HTTP-only cookies
 3. Add DataLoader to solve N+1 queries in resolvers
 4. Integrate a headless CMS for product content
-5. Add Stripe for real checkout flows
+5. Swap `stripe_mock` for real Stripe test mode (Stripe.js + webhooks)
 
 ## License
 
