@@ -1,5 +1,4 @@
 import { randomBytes } from "crypto";
-import { prisma } from "@/lib/prisma";
 import {
   normalizePaymentMethodId,
   type ConfirmIntentInput,
@@ -19,25 +18,12 @@ export class StripeMockProvider implements PaymentProvider {
     const providerPaymentId = mockId("pi_mock");
     const clientSecret = `${providerPaymentId}_secret_${randomBytes(6).toString("hex")}`;
 
-    const payment = await prisma.payment.create({
-      data: {
-        cartId: input.cartId,
-        amount: input.amount,
-        currency,
-        status: "requires_confirmation",
-        provider: "stripe_mock",
-        providerPaymentId,
-        clientSecret,
-      },
-    });
-
     return {
-      paymentId: payment.id,
       providerPaymentId,
       clientSecret,
       amount: input.amount,
       currency,
-      status: payment.status,
+      status: "requires_confirmation",
     };
   }
 

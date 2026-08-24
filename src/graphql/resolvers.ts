@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
+  cancelPayment,
   confirmPayment,
   createPaymentIntent,
 } from "@/lib/payments/payment-service";
@@ -214,6 +215,10 @@ export const resolvers = {
       }
     ) => {
       return confirmPayment({ paymentId, paymentMethodId, cardNumber });
+    },
+
+    cancelPayment: async (_: unknown, { paymentId }: { paymentId: string }) => {
+      return cancelPayment(paymentId);
     },
   },
 };

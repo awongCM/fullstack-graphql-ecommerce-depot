@@ -95,6 +95,19 @@ export const CREATE_PAYMENT_INTENT = gql`
   }
 `;
 
+export const CANCEL_PAYMENT = gql`
+  mutation CancelPayment($paymentId: ID!) {
+    cancelPayment(paymentId: $paymentId) {
+      paymentId
+      status
+      orderId
+      clientSecret
+      amount
+      currency
+    }
+  }
+`;
+
 export const CONFIRM_PAYMENT = gql`
   mutation ConfirmPayment(
     $paymentId: ID!

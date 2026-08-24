@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getPaymentProvider } from "@/lib/payments/stripe-mock-provider";
 import {
@@ -68,6 +69,20 @@ function assertInStock(items: ReturnType<typeof formatCart>["items"]) {
   }
 }
 
+async function cancelOpenIntentsForCart(
+  cartId: string,
+  tx: Prisma.TransactionClient
+) {
+  await tx.payment.updateMany({
+    where: { cartId, status: "requires_confirmation" },
+    data: { status: "canceled" },
+  });
+  await tx.order.updateMany({
+    where: { cartId, status: "pending_payment" },
+    data: { status: "canceled" },
+  });
+}
+
 export async function createPaymentIntent(cartId: string) {
   const cart = await getCartWithItems(cartId);
   const formatted = formatCart(cart);
@@ -78,25 +93,6 @@ export async function createPaymentIntent(cartId: string) {
 
   assertInStock(formatted.items);
 
-  // Create pending order + line-item snapshot before payment confirmation.
-  // Stock is NOT decremented until payment succeeds.
-  const order = await prisma.order.create({
-    data: {
-      cartId,
-      total: formatted.total,
-      status: "pending_payment",
-      lineItems: {
-        create: formatted.items.map((item) => ({
-          productId: item.productId,
-          productName: item.productName,
-          unitPrice: item.unitPrice,
-          quantity: item.quantity,
-          lineTotal: item.lineTotal,
-        })),
-      },
-    },
-  });
-
   const provider = getPaymentProvider();
   const intent = await provider.createIntent({
     cartId,
@@ -104,18 +100,49 @@ export async function createPaymentIntent(cartId: string) {
     currency: "usd",
   });
 
-  await prisma.payment.update({
-    where: { id: intent.paymentId },
-    data: { orderId: order.id },
+  // Order + payment are created together. Previous open intents for this cart
+  // are canceled so double-clicks don't leave orphan pending_payment orders.
+  const payment = await prisma.$transaction(async (tx) => {
+    await cancelOpenIntentsForCart(cartId, tx);
+
+    const order = await tx.order.create({
+      data: {
+        cartId,
+        total: formatted.total,
+        status: "pending_payment",
+        lineItems: {
+          create: formatted.items.map((item) => ({
+            productId: item.productId,
+            productName: item.productName,
+            unitPrice: item.unitPrice,
+            quantity: item.quantity,
+            lineTotal: item.lineTotal,
+          })),
+        },
+      },
+    });
+
+    return tx.payment.create({
+      data: {
+        cartId,
+        orderId: order.id,
+        amount: formatted.total,
+        currency: intent.currency,
+        status: intent.status,
+        provider: process.env.PAYMENT_PROVIDER ?? "stripe_mock",
+        providerPaymentId: intent.providerPaymentId,
+        clientSecret: intent.clientSecret,
+      },
+    });
   });
 
   return {
-    paymentId: intent.paymentId,
-    clientSecret: intent.clientSecret,
-    amount: intent.amount,
-    currency: intent.currency,
-    status: intent.status,
-    orderId: order.id,
+    paymentId: payment.id,
+    clientSecret: payment.clientSecret,
+    amount: toNumber(payment.amount),
+    currency: payment.currency,
+    status: payment.status,
+    orderId: payment.orderId!,
   };
 }
 
@@ -159,6 +186,16 @@ export async function confirmPayment(input: {
     };
   }
 
+  if (payment.status === "canceled" || payment.order?.status === "canceled") {
+    throw new Error("This payment was canceled. Create a new payment intent.");
+  }
+
+  if (payment.status === "failed" || payment.order?.status === "failed") {
+    throw new Error(
+      "This payment already failed. Create a new payment intent to retry."
+    );
+  }
+
   if (!payment.orderId || !payment.order) {
     throw new Error("Payment is not linked to an order");
   }
@@ -171,16 +208,6 @@ export async function confirmPayment(input: {
       total: payment.amount.toNumber(),
       paymentStatus: "succeeded",
     };
-  }
-
-  // Re-check stock at confirmation time.
-  for (const line of payment.order.lineItems) {
-    const product = await prisma.product.findUnique({
-      where: { id: line.productId },
-    });
-    if (!product || product.stock < line.quantity) {
-      throw new Error(`${line.productName} is out of stock`);
-    }
   }
 
   const provider = getPaymentProvider();
@@ -216,10 +243,17 @@ export async function confirmPayment(input: {
 
   await prisma.$transaction(async (tx) => {
     for (const line of payment.order!.lineItems) {
-      await tx.product.update({
-        where: { id: line.productId },
+      const updated = await tx.product.updateMany({
+        where: {
+          id: line.productId,
+          stock: { gte: line.quantity },
+        },
         data: { stock: { decrement: line.quantity } },
       });
+
+      if (updated.count !== 1) {
+        throw new Error(`${line.productName} is out of stock`);
+      }
     }
 
     await tx.payment.update({
@@ -244,5 +278,55 @@ export async function confirmPayment(input: {
     message: result.message,
     total: payment.amount.toNumber(),
     paymentStatus: "succeeded",
+  };
+}
+
+export async function cancelPayment(paymentId: string) {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+  });
+
+  if (!payment) {
+    throw new Error("Payment not found");
+  }
+
+  if (payment.status === "succeeded") {
+    throw new Error("Cannot cancel a succeeded payment");
+  }
+
+  if (payment.status === "canceled") {
+    return {
+      paymentId: payment.id,
+      clientSecret: payment.clientSecret,
+      amount: payment.amount.toNumber(),
+      currency: payment.currency,
+      status: "canceled",
+      orderId: payment.orderId,
+    };
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const next = await tx.payment.update({
+      where: { id: payment.id },
+      data: { status: "canceled" },
+    });
+
+    if (payment.orderId) {
+      await tx.order.updateMany({
+        where: { id: payment.orderId, status: "pending_payment" },
+        data: { status: "canceled" },
+      });
+    }
+
+    return next;
+  });
+
+  return {
+    paymentId: updated.id,
+    clientSecret: updated.clientSecret,
+    amount: updated.amount.toNumber(),
+    currency: updated.currency,
+    status: updated.status,
+    orderId: updated.orderId,
   };
 }

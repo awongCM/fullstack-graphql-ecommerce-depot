@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMutation, useQuery } from "@apollo/client";
 import { useEffect, useState } from "react";
 import {
+  CANCEL_PAYMENT,
   CONFIRM_PAYMENT,
   CREATE_PAYMENT_INTENT,
   GET_CART,
@@ -48,6 +49,8 @@ export default function CheckoutPage() {
 
   const [confirmPayment, { loading: confirming, error: confirmError }] =
     useMutation(CONFIRM_PAYMENT);
+
+  const [cancelPayment, { loading: canceling }] = useMutation(CANCEL_PAYMENT);
 
   if (!cartId || loading) {
     return <p className="loading">Loading checkout…</p>;
@@ -309,14 +312,21 @@ export default function CheckoutPage() {
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  disabled={confirming}
-                  onClick={() => {
+                  disabled={confirming || canceling}
+                  onClick={async () => {
+                    try {
+                      await cancelPayment({
+                        variables: { paymentId: intent.paymentId },
+                      });
+                    } catch {
+                      /* still clear local intent so the user can start over */
+                    }
                     setIntent(null);
                     setResult(null);
                     setFormError(null);
                   }}
                 >
-                  Cancel intent
+                  {canceling ? "Canceling…" : "Cancel intent"}
                 </button>
               </div>
             </>

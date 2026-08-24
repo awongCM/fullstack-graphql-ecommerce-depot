@@ -28,7 +28,7 @@ export const typeDefs = `#graphql
     amount: Float!
     currency: String!
     status: String!
-    orderId: ID!
+    orderId: ID
   }
 
   type CheckoutResult {
@@ -56,5 +56,6 @@ export const typeDefs = `#graphql
       paymentMethodId: String
       cardNumber: String
     ): CheckoutResult!
+    cancelPayment(paymentId: ID!): PaymentIntent!
   }
 `;

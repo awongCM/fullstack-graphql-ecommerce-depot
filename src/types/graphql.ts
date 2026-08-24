@@ -27,7 +27,7 @@ export type PaymentIntent = {
   amount: number;
   currency: string;
   status: string;
-  orderId: string;
+  orderId?: string | null;
 };
 
 export type CheckoutResult = {

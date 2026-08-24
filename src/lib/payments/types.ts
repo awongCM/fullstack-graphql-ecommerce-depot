@@ -9,8 +9,8 @@ export type CreateIntentInput = {
   currency?: string;
 };
 
+/** Provider-only payload. Persistence lives in PaymentService. */
 export type CreateIntentResult = {
-  paymentId: string;
   providerPaymentId: string;
   clientSecret: string;
   amount: number;
@@ -46,9 +46,8 @@ export function resolvePaymentMethodFromCard(
   if (digits.length < 4) return null;
 
   if (digits.startsWith("4242")) return "pm_card_visa";
-  if (digits.includes("9995") || digits.startsWith("4000000000009995")) {
-    return "pm_card_insufficient";
-  }
+  // Stripe insufficient-funds test card ends in 9995; also accept the short prefix.
+  if (digits.endsWith("9995")) return "pm_card_insufficient";
   if (digits.startsWith("4000")) return "pm_card_declined";
 
   return null;

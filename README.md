@@ -153,7 +153,7 @@ Checkout no longer places an order in one mutation. It follows a PaymentIntent p
 
 The checkout UI supports **both** a simulate dropdown and a fake card form.
 
-Stock is **not** decremented until payment succeeds. Failed payments leave the order as `failed`; start a new intent to retry.
+Stock is **not** decremented until payment succeeds. Failed or canceled payments cannot be reused — create a new intent to retry. Creating a new intent also cancels any previous `pending_payment` intent for the same cart.
 
 `PAYMENT_PROVIDER=stripe_mock` is the default. A real Stripe provider can be swapped behind the same `PaymentProvider` interface later.
 
